@@ -1,0 +1,38 @@
+[
+  {
+    "text": "---\nsource: MAA Digital Companion Platform\nsection: Emergency Contacts\ndoc_id: emergency_001\n---\n\n# Emergency Contacts\n\nThe Travel Assistance section provides emergency contact information to help users quickly access emergency assistance.\n\n## Emergency Contacts\n\n- Police – 100\n- Ambulance – 108\n- Women Helpline – 1091\n- Tourist Helpline – 1363\n\n## Emergency Travel Support\n\nMAA also provides emergency travel support for situations where users need urgent travel assistance.\n\nOptions include:\n\n- Book Emergency Travel\n- Talk to MAA Now",
+    "source": "MAA Digital Companion Platform",
+    "section": "Emergency Contacts",
+    "doc_id": "emergency_001"
+  },
+  {
+    "text": "---\nsource: MAA Digital Companion Platform\nsection: Food\ndoc_id: food_001\n---\n\n# Home-Made Food\n\nThe Home-Made Food section allows users to explore food prepared by local home cooks.\n\n## Features\n\n- Search for cooks, cuisines, or dishes\n- Apply filters\n- View available home cooks\n- View cook ratings\n- View preparation time\n- View location\n- View food categories\n- Explore popular dishes\n- View menus\n\n## Example Home Cooks\n\n- Aiza Aunty\n- Adeel Bhai\n- Mubeen Didi\n\n## Food Information\n\nThe platform presents information such as:\n- Ratings\n- Reviews\n- Cooking time\n- Location\n- Cuisine type\n- Popular dishes",
+    "source": "MAA Digital Companion Platform",
+    "section": "Food",
+    "doc_id": "food_001"
+  },
+  {
+    "text": "---\nsource: MAA Digital Companion Platform\nsection: General Information\ndoc_id: maa_001\n---\n\n# MAA Digital Companion Platform\n\n## Project Overview\n\nMAA is a digital companion web application designed to provide users with helpful everyday services through a single platform. The platform focuses on making daily life easier by offering home-made food services, medicine and health assistance, travel support, and an AI companion.\n\nMAA is designed as a caring digital assistant that helps users manage different needs from one place.\n\n## Project Purpose\n\nThe purpose of MAA is to provide users with a simple and supportive digital platform where they can access essential services and assistance.\n\nThe platform combines multiple services into one website:\n\n- Home-made food\n- Medicine and health assistance\n- Travel assistance\n- AI companion\n- Emergency support\n- User account management\n\n## Target Users\n\nMAA is designed for users who need convenient access to everyday support and services. The platform can be useful for:\n\n- Students\n- Working professionals\n- Senior citizens\n- People living away from home\n- Travelers\n- Users looking for an AI-based companion\n\n## Main Features\n\n### User Registration\n\nNew users can create an account using:\n\n- Name\n- Email\n- Phone number\n- Password\n- Confirm password\n\nThe registration form also includes agreement to the Terms of Service and Privacy Policy.\n\n### User Login\n\nExisting users can log in to their MAA account using the login option available on the website.\n\n### Home Page\n\nThe home page introduces the MAA platform and provides navigation to its main services.\n\nThe main navigation includes:\n\n- Home\n- Food\n- Medicine\n- Travel\n- Talk to MAA\n- Login\n- Get Started\n\nThe homepage also contains user testimonials under the \"Loved by Many\" section.",
+    "source": "MAA Digital Companion Platform",
+    "section": "General Information",
+    "doc_id": "maa_001"
+  },
+  {
+    "text": "---\nsource: MAA Digital Companion Platform\nsection: Medicine & Health\ndoc_id: medicine_001\n---\n\n# Medicine & Health\n\nThe Medicine & Health section provides users with access to medicine-related services and health support.\n\n## Main Options\n\n- Order\n- Reminders\n- Health Tips\n\n## Medicine Search\n\nUsers can search for medicines and add them to a cart.\n\n## Example Medicines\n\n- Paracetamol 500mg\n- Vitamin D3 1000IU\n- Cetirizine 10mg\n\nThe medicine section is intended to make medicine-related tasks more convenient for users.",
+    "source": "MAA Digital Companion Platform",
+    "section": "Medicine & Health",
+    "doc_id": "medicine_001"
+  },
+  {
+    "text": "---\nsource: MAA Digital Companion Platform\nsection: AI Companion\ndoc_id: ai_001\n---\n\n# AI Companion — Talk to MAA\n\nThe \"Talk to MAA\" feature provides an AI-based conversational interface.\n\nMAA communicates with users through a chat interface and is designed to provide supportive responses.\n\n## Suggested Prompts\n\nUsers can interact with MAA through suggested prompts such as:\n\n- How are you, MAA?\n- I'm feeling stressed\n- Suggest dinner\n- I miss home\n\n## User Interaction\n\nUsers can also type their own messages in the chat input.\n\nThe AI Companion is presented as a caring digital assistant that listens, supports, and checks on users.",
+    "source": "MAA Digital Companion Platform",
+    "section": "AI Companion",
+    "doc_id": "ai_001"
+  },
+  {
+    "text": "---\n---\nsource: MAA Digital Companion Platform\nsection: Travel Assistance\ndoc_id: travel_001\n---\n\n# Travel Assistance\n\nThe Travel Assistance section helps users plan trips and access travel-related information.\n\n## Main Options\n\n- Plan Trip\n- Travel Tips\n- Emergency\n\n## Trip Planning\n\nUsers can enter:\n\n- Starting city\n- Destination\n- Date\n\nAfter entering the required information, users can search for travel options.\n\n## Popular Destinations\n\nThe interface displays popular destinations such as:\n\n- Karachi\n- Mianwali\n- Raheem Yar Khan\n- Kashmir\n- Muzaffarabad\n- Lyari\n\n## Emergency Travel Support\n\nMAA provides an emergency travel support section for situations where users need urgent travel assistance.\n\nOptions include:\n\n- Book Emergency Travel\n- Talk to MAA",
+    "source": "MAA Digital Companion Platform",
+    "section": "Travel Assistance",
+    "doc_id": "travel_001"
+  }
+]
