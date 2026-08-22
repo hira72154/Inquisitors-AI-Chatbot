@@ -1,61 +1,87 @@
 import chromadb
-from sentence_transformers import SentenceTransformer
 import numpy as np
-llm
+from pathlib import Path
+from sentence_transformers import SentenceTransformer
 from typing import List, Dict
 
 
+# ============================================================
+# EMBEDDING GENERATOR
+# ============================================================
+
 class EmbeddingGenerator:
+
     def __init__(
         self,
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     ):
-        print(f"Loading model: {model_name}")
+        print(f"Loading embedding model: {model_name}")
 
         self.model = SentenceTransformer(model_name)
 
         print(
-            f"✅ Model loaded. Dimensions: "
-            f"{self.model.get_sentence_embedding_dimension()}"
+            f"Embedding model loaded. "
+            f"Dimensions: {self.model.get_embedding_dimension()}"
         )
 
     def embed_text(self, text: str) -> np.ndarray:
-        """Convert text into an embedding vector."""
         return self.model.encode(
             text,
             convert_to_numpy=True
         )
 
 
-class Retriever:
-    """Search the ChromaDB database for relevant chunks."""
+# ============================================================
+# RETRIEVER
+# ============================================================
 
-    def __init__(
-        self,
-        persist_dir: str = "../embeddings/chroma_db"
-    ):
+class Retriever:
+
+    def __init__(self, persist_dir: str | None = None):
+
         print("Initializing Retriever...")
+
+        project_root = Path(__file__).resolve().parent.parent
+
+        if persist_dir is None:
+            persist_dir = (
+                project_root
+                / "embeddings"
+                / "chroma_db"
+            )
+
+        self.persist_dir = str(persist_dir)
+
+        print(
+            f"ChromaDB path: {self.persist_dir}"
+        )
 
         self.embedder = EmbeddingGenerator()
 
         self.client = chromadb.PersistentClient(
-            path=persist_dir
+            path=self.persist_dir
         )
 
         self.collection = self.client.get_or_create_collection(
             name="maa_knowledge"
         )
 
-        print("✅ Retriever ready")
+        print(
+            f"Retriever ready. "
+            f"Documents in collection: "
+            f"{self.collection.count()}"
+        )
+
+    # ========================================================
+    # CATEGORY DETECTION
+    # ========================================================
 
     def _detect_category(self, query: str) -> str:
-        """
-        Detect the main MAA service category from the query.
-        """
 
         query_lower = query.lower()
 
-        category_keywords = {
+        categories = {
+
             "medicine": [
                 "medicine",
                 "medicines",
@@ -63,14 +89,13 @@ class Retriever:
                 "medications",
                 "drug",
                 "drugs",
-                "health",
                 "tablet",
                 "tablets",
                 "prescription",
-                "prescriptions",
                 "paracetamol",
                 "vitamin",
-                "cetirizine"
+                "cetirizine",
+                "pharmacy"
             ],
 
             "food": [
@@ -82,7 +107,15 @@ class Retriever:
                 "cooks",
                 "homemade",
                 "home-made",
-                "restaurant"
+                "restaurant",
+                "dish",
+                "dishes",
+                "cuisine",
+                "grocery",
+                "groceries",
+                "grocer",
+                "shopping",
+                "ingredients"
             ],
 
             "travel": [
@@ -94,8 +127,10 @@ class Retriever:
                 "hotel",
                 "hotels",
                 "destination",
-                "destinations",
-                "tour"
+                "tour",
+                "journey",
+                "airport",
+                "booking"
             ],
 
             "emergency": [
@@ -103,7 +138,32 @@ class Retriever:
                 "urgent",
                 "urgently",
                 "crisis",
-                "help now"
+                "danger",
+                "help now",
+                "immediate"
+            ],
+
+            "wellness": [
+                "stress",
+                "stressed",
+                "anxiety",
+                "anxious",
+                "sad",
+                "sadness",
+                "overwhelmed",
+                "worried",
+                "worry",
+                "lonely",
+                "loneliness",
+                "upset",
+                "calm",
+                "relax",
+                "relaxation",
+                "breathing",
+                "breathe",
+                "mental",
+                "feeling",
+                "feelings"
             ],
 
             "ai": [
@@ -116,214 +176,360 @@ class Retriever:
             ]
         }
 
-        for category, keywords in category_keywords.items():
+        for category, keywords in categories.items():
+
             for keyword in keywords:
+
                 if keyword in query_lower:
                     return category
 
         return ""
 
+    # ========================================================
+    # CATEGORY DOCUMENT MATCHING
+    # ========================================================
 
+    def _category_matches(
+        self,
+        metadata: Dict,
+        category: str
+    ) -> bool:
 
-class EmbeddingGenerator:
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        print(f"Loading model: {model_name}")
-        self.model = SentenceTransformer(model_name)
-        print(f"✅ Model loaded. Dimensions: {self.model.get_sentence_embedding_dimension()}")
-    
-    def embed_text(self, text: str) -> np.ndarray:
-        return self.model.encode(text, convert_to_numpy=True)
-from typing import List, Dict
+        if not category:
+            return False
 
-class Retriever:
-    """Search the ChromaDB database for relevant chunks."""
-    
-    def __init__(self, persist_dir: str = "../embeddings/chroma_db"):
-        """
-        Initialize retriever.
-        """
-        print("Initializing Retriever...")
-        self.embedder = EmbeddingGenerator()
-        self.client = chromadb.PersistentClient(path=persist_dir)
-        self.collection = self.client.get_or_create_collection(name="maa_knowledge")
-        print("✅ Retriever ready")
-    
- main
+        doc_id = str(
+            metadata.get("doc_id", "")
+        ).lower()
+
+        source = str(
+            metadata.get("source", "")
+        ).lower()
+
+        section = str(
+            metadata.get("section", "")
+        ).lower()
+
+        # Direct document ID match
+        if category in doc_id:
+            return True
+
+        # Check source
+        if category in source:
+            return True
+
+        # Check section
+        if category in section:
+            return True
+
+        # Wellness can be represented by health-related docs
+        if category == "wellness":
+
+            wellness_terms = [
+                "wellness",
+                "health",
+                "mental",
+                "mind",
+                "emotional",
+                "care",
+                "support"
+            ]
+
+            combined = (
+                doc_id + " "
+                + source + " "
+                + section
+            )
+
+            return any(
+                term in combined
+                for term in wellness_terms
+            )
+
+        # Food/grocery can be represented by home docs
+        if category == "food":
+
+            food_terms = [
+                "food",
+                "home",
+                "meal",
+                "grocery",
+                "cook"
+            ]
+
+            combined = (
+                doc_id + " "
+                + source + " "
+                + section
+            )
+
+            return any(
+                term in combined
+                for term in food_terms
+            )
+
+        return False
+
+    # ========================================================
+    # RETRIEVE
+    # ========================================================
+
     def retrieve(
         self,
         query: str,
         top_k: int = 3,
-        similarity_threshold: float = 0.3
+        similarity_threshold: float = 0.20
     ) -> List[Dict]:
-        """
- llm
-        Retrieve relevant chunks using semantic similarity
-        plus category-aware boosting.
-        """
 
         if not query.strip():
-            raise ValueError("Query cannot be empty.")
+            raise ValueError(
+                "Query cannot be empty."
+            )
 
-        # --------------------------------------------------
-        # Step 1: Embed query
-        # --------------------------------------------------
+        if self.collection.count() == 0:
+            return []
 
-        query_embedding = self.embedder.embed_text(query)
-        query_embedding_list = query_embedding.tolist()
+        # ----------------------------------------------------
+        # 1. Embed query
+        # ----------------------------------------------------
 
-        # --------------------------------------------------
-        # Step 2: Retrieve candidates
-        # --------------------------------------------------
-
-        results = self.collection.query(
-            query_embeddings=[query_embedding_list],
-            n_results=10
+        query_embedding = self.embedder.embed_text(
+            query
         )
 
-        # --------------------------------------------------
-        # Step 3: Detect service category
-        # --------------------------------------------------
+        query_embedding_list = (
+            query_embedding.tolist()
+        )
 
-        category = self._detect_category(query)
+        # ----------------------------------------------------
+        # 2. Search ChromaDB
+        # ----------------------------------------------------
 
-        # --------------------------------------------------
-        # Step 4: Build matched chunks
-        # --------------------------------------------------
+        n_results = min(
+            10,
+            self.collection.count()
+        )
+
+        results = self.collection.query(
+            query_embeddings=[
+                query_embedding_list
+            ],
+            n_results=n_results
+        )
+
+        if (
+            not results.get("ids")
+            or not results["ids"][0]
+        ):
+            return []
+
+        # ----------------------------------------------------
+        # 3. Detect category
+        # ----------------------------------------------------
+
+        category = self._detect_category(
+            query
+        )
+
+        # ----------------------------------------------------
+        # 4. Build results
+        # ----------------------------------------------------
 
         matched_chunks = []
 
-        for i in range(len(results["ids"][0])):
+        for i in range(
+            len(results["ids"][0])
+        ):
 
             chunk_id = results["ids"][0][i]
+
             distance = results["distances"][0][i]
 
             similarity = 1 - distance
 
-            metadata = results["metadatas"][0][i]
-
-            doc_id = metadata.get(
-                "doc_id",
-                ""
+            metadata = (
+                results["metadatas"][0][i]
+                or {}
             )
 
-            # --------------------------------------------------
-            # Category boost
-            # --------------------------------------------------
+            text = (
+                results["documents"][0][i]
+                or ""
+            )
 
-            boosted_similarity = similarity
+            # ------------------------------------------------
+            # Category boost
+            # ------------------------------------------------
+
+            score = similarity
 
             if category:
-                expected_doc_id = f"{category}_001"
 
-                if doc_id == expected_doc_id:
-                    boosted_similarity += 0.20
+                if self._category_matches(
+                    metadata,
+                    category
+                ):
+                    score += 0.20
 
-            # --------------------------------------------------
-            # Threshold applies to original similarity
-            # --------------------------------------------------
+            # ------------------------------------------------
+            # Keyword/context boost
+            # ------------------------------------------------
+
+            query_words = set(
+                query.lower().split()
+            )
+
+            text_lower = text.lower()
+
+            keyword_matches = sum(
+                1
+                for word in query_words
+                if len(word) > 3
+                and word in text_lower
+            )
+
+            score += min(
+                keyword_matches * 0.03,
+                0.15
+            )
+
+            # ------------------------------------------------
+            # Threshold
+            # ------------------------------------------------
 
             if similarity >= similarity_threshold:
 
                 matched_chunks.append({
+
                     "chunk_id": chunk_id,
-                    "text": results["documents"][0][i],
+
+                    "text": text,
+
                     "source": metadata.get(
                         "source",
-                        "unknown"
+                        "MAA Knowledge Base"
                     ),
+
                     "section": metadata.get(
                         "section",
                         "general"
                     ),
-                    "similarity": float(similarity),
-                    "score": float(boosted_similarity)
+
+                    "doc_id": metadata.get(
+                        "doc_id",
+                        ""
+                    ),
+
+                    "similarity": float(
+                        similarity
+                    ),
+
+                    "score": float(
+                        score
+                    ),
+
+                    "category": category
                 })
 
-        # --------------------------------------------------
-        # Step 5: Sort by boosted score
-        # --------------------------------------------------
+        # ----------------------------------------------------
+        # 5. Sort
+        # ----------------------------------------------------
 
         matched_chunks.sort(
             key=lambda x: x["score"],
             reverse=True
         )
 
-        # --------------------------------------------------
-        # Step 6: Return top results
-        # --------------------------------------------------
+        # ----------------------------------------------------
+        # 6. Return top results
+        # ----------------------------------------------------
 
         return matched_chunks[:top_k]
 
 
+# ============================================================
+# TESTING
+# ============================================================
+
 if __name__ == "__main__":
 
     retriever = Retriever()
 
     test_queries = [
+
         "How do I plan a trip?",
+
         "What food services are available?",
+
         "I need medicine",
-        "Can MAA help me with emergency travel?"
+
+        "Can MAA help me with emergency travel?",
+
+        "I am feeling stressed",
+
+        "Can you help me with groceries?"
+
     ]
 
-    for q in test_queries:
+    for query in test_queries:
 
-        print(f"\n🔍 Query: '{q}'")
+        print("\n" + "=" * 60)
 
-        results = retriever.retrieve(
-            q,
-            top_k=3
+        print(
+            f"Query: {query}"
         )
 
-        for r in results:
+        print("=" * 60)
+
+        try:
+
+            results = retriever.retrieve(
+                query,
+                top_k=3
+            )
+
+            if not results:
+
+                print(
+                    "No relevant documentation found."
+                )
+
+                continue
+
+            for result in results:
+
+                print(
+                    f"\nChunk: "
+                    f"{result['chunk_id']}"
+                )
+
+                print(
+                    f"Category: "
+                    f"{result['category']}"
+                )
+
+                print(
+                    f"Similarity: "
+                    f"{result['similarity']:.3f}"
+                )
+
+                print(
+                    f"Score: "
+                    f"{result['score']:.3f}"
+                )
+
+                print(
+                    f"Source: "
+                    f"{result['source']}"
+                )
+
+                print(
+                    f"Text: "
+                    f"{result['text'][:250]}..."
+                )
+
+        except Exception as error:
 
             print(
-                f"  - {r['chunk_id']} "
-                f"(similarity: {r['similarity']:.2f}, "
-                f"score: {r['score']:.2f})"
+                f"Retrieval error: {error}"
             )
-        Search for chunks similar to the query.    ]
-        """
-        
-        # Embed the query
-        query_embedding = self.embedder.embed_text(query)
-        query_embedding_list = query_embedding.tolist()
-        
-        # Search ChromaDB
-        results = self.collection.query(
-            query_embeddings=[query_embedding_list],
-            n_results=top_k
-        )
-        
-    
-        matched_chunks = []
-        for i in range(len(results['ids'][0])):
-            distance = results['distances'][0][i]
-            similarity = 1 - distance
-            
-            if similarity >= similarity_threshold:
-                matched_chunks.append({
-                    'chunk_id': results['ids'][0][i],
-                    'text': results['documents'][0][i],
-                    'source': results['metadatas'][0][i].get('source', 'unknown'),
-                    'section': results['metadatas'][0][i].get('section', 'general'),
-                    'similarity': float(similarity)
-                })
-        
-        return matched_chunks
-
-
-if __name__ == "__main__":
-    retriever = Retriever()
-    
-    test_queries = [
-        "How do I plan a trip?",
-        "What food services are available?",
-        "I need medicine"
-    ]
-    
-    for q in test_queries:
-        print(f"\n🔍 Query: '{q}'")
-        results = retriever.retrieve(q, top_k=2)
-        for r in results:
-            print(f"  - {r['chunk_id']} (similarity: {r['similarity']:.2f})")
