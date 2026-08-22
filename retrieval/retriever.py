@@ -1,5 +1,6 @@
 import chromadb
 import numpy as np
+
 from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict
@@ -210,16 +211,16 @@ class Retriever:
             metadata.get("section", "")
         ).lower()
 
-        # Direct document ID match
-        if category in doc_id:
-            return True
+        combined = (
+            doc_id
+            + " "
+            + source
+            + " "
+            + section
+        )
 
-        # Check source
-        if category in source:
-            return True
-
-        # Check section
-        if category in section:
+        # Direct category match
+        if category in combined:
             return True
 
         # Wellness can be represented by health-related docs
@@ -235,18 +236,12 @@ class Retriever:
                 "support"
             ]
 
-            combined = (
-                doc_id + " "
-                + source + " "
-                + section
-            )
-
             return any(
                 term in combined
                 for term in wellness_terms
             )
 
-        # Food/grocery can be represented by home docs
+        # Food can be represented by home-related docs
         if category == "food":
 
             food_terms = [
@@ -256,12 +251,6 @@ class Retriever:
                 "grocery",
                 "cook"
             ]
-
-            combined = (
-                doc_id + " "
-                + source + " "
-                + section
-            )
 
             return any(
                 term in combined
@@ -277,8 +266,8 @@ class Retriever:
     def retrieve(
         self,
         query: str,
-        top_k: int = 3,
-        similarity_threshold: float = 0.20
+        top_k: int = 2,
+        similarity_threshold: float = 0.35
     ) -> List[Dict]:
 
         if not query.strip():
@@ -290,7 +279,7 @@ class Retriever:
             return []
 
         # ----------------------------------------------------
-        # 1. Embed query
+        # 1. EMBED QUERY
         # ----------------------------------------------------
 
         query_embedding = self.embedder.embed_text(
@@ -302,7 +291,7 @@ class Retriever:
         )
 
         # ----------------------------------------------------
-        # 2. Search ChromaDB
+        # 2. SEARCH CHROMADB
         # ----------------------------------------------------
 
         n_results = min(
@@ -324,7 +313,7 @@ class Retriever:
             return []
 
         # ----------------------------------------------------
-        # 3. Detect category
+        # 3. DETECT CATEGORY
         # ----------------------------------------------------
 
         category = self._detect_category(
@@ -332,10 +321,25 @@ class Retriever:
         )
 
         # ----------------------------------------------------
-        # 4. Build results
+        # 4. QUERY WORDS
         # ----------------------------------------------------
 
-        matched_chunks = []
+        query_words = set(
+            word.strip(".,!?;:'\"()[]{}")
+            for word in query.lower().split()
+        )
+
+        query_words = {
+            word
+            for word in query_words
+            if len(word) > 3
+        }
+
+        # ----------------------------------------------------
+        # 5. BUILD CANDIDATES
+        # ----------------------------------------------------
+
+        candidates = []
 
         for i in range(
             len(results["ids"][0])
@@ -343,7 +347,9 @@ class Retriever:
 
             chunk_id = results["ids"][0][i]
 
-            distance = results["distances"][0][i]
+            distance = float(
+                results["distances"][0][i]
+            )
 
             similarity = 1 - distance
 
@@ -355,96 +361,139 @@ class Retriever:
             text = (
                 results["documents"][0][i]
                 or ""
-            )
+            ).strip()
+
+            if not text:
+                continue
 
             # ------------------------------------------------
-            # Category boost
+            # HARD SIMILARITY FILTER
             # ------------------------------------------------
 
-            score = similarity
+            if similarity < similarity_threshold:
+                continue
+
+            # ------------------------------------------------
+            # CATEGORY MATCH
+            # ------------------------------------------------
+
+            category_match = False
 
             if category:
 
-                if self._category_matches(
+                category_match = self._category_matches(
                     metadata,
                     category
-                ):
-                    score += 0.20
+                )
 
             # ------------------------------------------------
-            # Keyword/context boost
+            # KEYWORD MATCH
             # ------------------------------------------------
-
-            query_words = set(
-                query.lower().split()
-            )
 
             text_lower = text.lower()
 
             keyword_matches = sum(
                 1
                 for word in query_words
-                if len(word) > 3
-                and word in text_lower
+                if word in text_lower
             )
 
-            score += min(
-                keyword_matches * 0.03,
-                0.15
+            keyword_boost = min(
+                keyword_matches * 0.02,
+                0.08
             )
 
             # ------------------------------------------------
-            # Threshold
+            # FINAL SCORE
             # ------------------------------------------------
 
-            if similarity >= similarity_threshold:
+            score = similarity
 
-                matched_chunks.append({
+            # Small category boost
+            if category_match:
+                score += 0.08
 
-                    "chunk_id": chunk_id,
+            # Small keyword boost
+            score += keyword_boost
 
-                    "text": text,
+            # ------------------------------------------------
+            # STORE
+            # ------------------------------------------------
 
-                    "source": metadata.get(
-                        "source",
-                        "MAA Knowledge Base"
-                    ),
+            candidates.append({
 
-                    "section": metadata.get(
-                        "section",
-                        "general"
-                    ),
+                "chunk_id": chunk_id,
 
-                    "doc_id": metadata.get(
-                        "doc_id",
-                        ""
-                    ),
+                "text": text,
 
-                    "similarity": float(
-                        similarity
-                    ),
+                "source": metadata.get(
+                    "source",
+                    "MAA Knowledge Base"
+                ),
 
-                    "score": float(
-                        score
-                    ),
+                "section": metadata.get(
+                    "section",
+                    "general"
+                ),
 
-                    "category": category
-                })
+                "doc_id": metadata.get(
+                    "doc_id",
+                    ""
+                ),
+
+                "similarity": float(
+                    similarity
+                ),
+
+                "score": float(
+                    score
+                ),
+
+                "category": category,
+
+                "category_match": category_match,
+
+                "keyword_matches": keyword_matches
+            })
 
         # ----------------------------------------------------
-        # 5. Sort
+        # 6. NO RELEVANT RESULTS
         # ----------------------------------------------------
 
-        matched_chunks.sort(
+        if not candidates:
+            return []
+
+        # ----------------------------------------------------
+        # 7. SORT
+        # ----------------------------------------------------
+
+        candidates.sort(
             key=lambda x: x["score"],
             reverse=True
         )
 
         # ----------------------------------------------------
-        # 6. Return top results
+        # 8. RETURN ONLY STRONGEST RESULTS
         # ----------------------------------------------------
 
-        return matched_chunks[:top_k]
+        final_results = []
+
+        for candidate in candidates:
+
+            # Don't allow extremely weak matches
+            if candidate["similarity"] < 0.35:
+                continue
+
+            final_results.append(candidate)
+
+            if len(final_results) >= top_k:
+                break
+
+        # ----------------------------------------------------
+        # 9. RETURN
+        # ----------------------------------------------------
+
+        return final_results
 
 
 # ============================================================
@@ -468,7 +517,6 @@ if __name__ == "__main__":
         "I am feeling stressed",
 
         "Can you help me with groceries?"
-
     ]
 
     for query in test_queries:
@@ -485,7 +533,8 @@ if __name__ == "__main__":
 
             results = retriever.retrieve(
                 query,
-                top_k=3
+                top_k=2,
+                similarity_threshold=0.35
             )
 
             if not results:
@@ -509,6 +558,11 @@ if __name__ == "__main__":
                 )
 
                 print(
+                    f"Category Match: "
+                    f"{result['category_match']}"
+                )
+
+                print(
                     f"Similarity: "
                     f"{result['similarity']:.3f}"
                 )
@@ -516,6 +570,11 @@ if __name__ == "__main__":
                 print(
                     f"Score: "
                     f"{result['score']:.3f}"
+                )
+
+                print(
+                    f"Keywords: "
+                    f"{result['keyword_matches']}"
                 )
 
                 print(

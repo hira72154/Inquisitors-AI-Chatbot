@@ -1,5 +1,7 @@
+# -*- coding: utf-8 -*-
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -8,6 +10,7 @@ import sys
 from pathlib import Path
 
 from groq import Groq
+
 
 # ============================================================
 # PATH SETUP
@@ -43,7 +46,7 @@ else:
 
 app = FastAPI(
     title="MAA Chatbot Backend",
-    description="RAG-based backend for MAA AI Companion"
+    description="RAG + LLM based backend for MAA AI Companion"
 )
 
 app.add_middleware(
@@ -67,30 +70,35 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     session_id: str
-    sources: list = []
+    sources: list = Field(default_factory=list)
     memory_updated: bool = False
 
 
 # ============================================================
-# INITIALIZE RAG RETRIEVER
+# INITIALIZE RAG
 # ============================================================
 
 print("\n" + "=" * 60)
-print("MAA RAG CHATBOT")
+print("MAA AI COMPANION")
 print("=" * 60)
 
 try:
     retriever = Retriever()
 
     print("✅ RAG Retriever initialized")
+
     print(
         f"✅ ChromaDB documents: "
         f"{retriever.collection.count()}"
     )
 
 except Exception as e:
+
     retriever = None
-    print(f"❌ Retriever initialization failed: {e}")
+
+    print(
+        f"❌ Retriever initialization failed: {e}"
+    )
 
 
 # ============================================================
@@ -108,6 +116,257 @@ def get_relevant_memories(
 
 
 # ============================================================
+# QUERY TYPE DETECTION
+# ============================================================
+
+def detect_query_type(message: str) -> str:
+
+    text = message.lower().strip()
+
+    # --------------------------------------------------------
+    # Normalize common punctuation
+    # --------------------------------------------------------
+
+    normalized = (
+        text
+        .replace("-", " ")
+        .replace("_", " ")
+        .replace(",", " ")
+        .replace(".", " ")
+        .replace("!", "")
+        .replace("?", "")
+    )
+
+    normalized = " ".join(normalized.split())
+
+    # --------------------------------------------------------
+    # GREETINGS
+    # --------------------------------------------------------
+
+    greeting_patterns = [
+        "hello",
+        "helo",
+        "helloo",
+        "hellooo",
+        "hlo",
+        "hy",
+        "hyy",
+        "hi",
+        "hii",
+        "hiii",
+        "hey",
+        "heyy",
+        "heyyy",
+        "salam",
+        "salaam",
+        "salam alaikum",
+        "salaam alaikum",
+        "assalamualaikum",
+        "assalam o alaikum",
+        "assalam o alikum",
+        "asalamualaikum",
+        "aslam o alaikum",
+        "aoa",
+        "a o a"
+    ]
+
+    if normalized in greeting_patterns:
+        return "greeting"
+
+    # --------------------------------------------------------
+    # THANK YOU
+    # --------------------------------------------------------
+
+    thank_patterns = [
+        "thanks",
+        "thank you",
+        "thankyou",
+        "thx",
+        "ty",
+        "shukriya",
+        "shukria"
+    ]
+
+    if normalized in thank_patterns:
+        return "thanks"
+
+    # --------------------------------------------------------
+    # GOODBYE
+    # --------------------------------------------------------
+
+    goodbye_patterns = [
+        "bye",
+        "goodbye",
+        "good bye",
+        "allah hafiz",
+        "khuda hafiz",
+        "see you",
+        "see ya"
+    ]
+
+    if normalized in goodbye_patterns:
+        return "goodbye"
+
+    # --------------------------------------------------------
+    # URDU / ROMAN URDU
+    # --------------------------------------------------------
+
+    urdu_patterns = [
+        "kia tmhy urdu ati ha",
+        "kya tmhy urdu ati hai",
+        "kya tumhein urdu aati hai",
+        "kya tumhe urdu aati hai",
+        "urdu ati hai",
+        "urdu aati hai",
+        "can you speak urdu",
+        "do you speak urdu"
+    ]
+
+    if normalized in urdu_patterns:
+        return "urdu"
+
+    # --------------------------------------------------------
+    # IDENTITY
+    # --------------------------------------------------------
+
+    identity_patterns = [
+        "who are you",
+        "what are you",
+        "what is your name",
+        "your name",
+        "who is maa",
+        "what is maa",
+        "tum kon ho",
+        "aap kon hain"
+    ]
+
+    if any(
+        phrase in normalized
+        for phrase in identity_patterns
+    ):
+        return "identity"
+
+    # --------------------------------------------------------
+    # EMOTIONAL / WELLNESS
+    # --------------------------------------------------------
+
+    emotional_keywords = [
+        "sad",
+        "sadness",
+        "unhappy",
+        "upset",
+        "crying",
+        "cry",
+        "lonely",
+        "loneliness",
+        "alone",
+        "stressed",
+        "stress",
+        "anxious",
+        "anxiety",
+        "worried",
+        "worry",
+        "overwhelmed",
+        "depressed",
+        "feeling low",
+        "feel low",
+        "feeling bad",
+        "not feeling good",
+        "not okay",
+        "not ok",
+        "bad day",
+        "hurt",
+        "tired",
+        "exhausted",
+        "udaas",
+        "pareshan",
+        "tension",
+        "tanha",
+        "akela",
+        "dukhi",
+        "fever",
+        "temperature",
+        "i feel sick",
+        "i am sick",
+        "im sick"
+    ]
+
+    if any(
+        word in normalized
+        for word in emotional_keywords
+    ):
+        return "wellness"
+
+    # --------------------------------------------------------
+    # MAA SERVICE / DOCUMENTATION QUERY
+    # --------------------------------------------------------
+
+    service_keywords = [
+        "maa service",
+        "maa services",
+        "maa provide",
+        "maa offers",
+        "maa offer",
+        "maa help",
+        "maa feature",
+        "maa features",
+
+        "service",
+        "services",
+        "provide",
+        "provides",
+        "offers",
+        "offer",
+        "available",
+
+        "travel assistance",
+        "travel",
+        "trip",
+        "flight",
+        "hotel",
+        "destination",
+        "destinations",
+
+        "food services",
+        "food service",
+        "food",
+        "meal",
+        "meals",
+        "grocery",
+        "groceries",
+        "home made food",
+        "homemade food",
+
+        "medicine",
+        "medicines",
+        "medication",
+        "health service",
+        "health services",
+        "health assistance",
+
+        "emergency",
+        "emergency support",
+        "assistance",
+        "account",
+        "registration",
+        "login",
+        "profile"
+    ]
+
+    if any(
+        keyword in normalized
+        for keyword in service_keywords
+    ):
+        return "maa_service"
+
+    # --------------------------------------------------------
+    # GENERAL CONVERSATION
+    # --------------------------------------------------------
+
+    return "general"
+
+
+# ============================================================
 # RAG RETRIEVAL
 # ============================================================
 
@@ -120,111 +379,324 @@ def retrieve_context(
         return []
 
     try:
-        return retriever.retrieve(
+
+        results = retriever.retrieve(
             query=query,
             top_k=top_k,
-            similarity_threshold=0.25
+            similarity_threshold=0.30
         )
 
+        filtered_results = []
+
+        for item in results:
+
+            similarity = float(
+                item.get("similarity", 0)
+            )
+
+            if similarity >= 0.30:
+                filtered_results.append(item)
+
+        return filtered_results
+
     except Exception as e:
-        print(f"❌ Retrieval error: {e}")
+
+        print(
+            f"❌ Retrieval error: {e}"
+        )
+
         return []
 
 
 # ============================================================
-# LLM RESPONSE GENERATOR
+# DIRECT CONVERSATION
 # ============================================================
 
-def generate_response(
-    user_message: str,
-    context: list
-) -> str:
+def direct_response(message: str):
 
-    message = user_message.lower().strip()
+    """
+    Handles simple conversational messages before RAG.
+    """
 
-    # --------------------------------------------------------
+    message_lower = message.lower().strip()
+
+    # ========================================================
     # GREETINGS
-    # --------------------------------------------------------
+    # ========================================================
 
-    greetings = [
+    greeting_patterns = [
         "hello",
+        "helo",
+        "helloo",
+        "hellooo",
+        "hlo",
+        "hy",
+        "hyy",
         "hi",
+        "hii",
+        "hiii",
         "hey",
+        "heyy",
+        "heyyy",
         "salam",
-        "assalam",
-        "assalamualaikum"
+        "salaam",
+        "assalamualaikum",
+        "assalam o alaikum",
+        "assalam o alikum",
+        "asalamualaikum",
+        "aslam o alaikum",
+        "aoa"
     ]
 
-    if any(word in message for word in greetings):
+    if message_lower in greeting_patterns:
+
         return (
-            "Hi! 💗 I'm MAA, your AI companion. "
-            "How can I help you today?"
+            "Hello! 💗 I'm MAA, your AI companion. "
+            "How are you doing today?"
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # THANK YOU
-    # --------------------------------------------------------
+    # ========================================================
 
-    if any(word in message for word in [
-        "thank",
+    thank_you_patterns = [
         "thanks",
-        "thank you"
-    ]):
+        "thank you",
+        "thankyou",
+        "thx",
+        "shukriya",
+        "shukria",
+        "ty"
+    ]
+
+    if message_lower in thank_you_patterns:
+
         return (
             "You're very welcome! 💗 "
-            "I'm always here to help."
+            "I'm always happy to help."
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # GOODBYE
-    # --------------------------------------------------------
+    # ========================================================
 
-    if any(word in message for word in [
+    goodbye_patterns = [
         "bye",
-        "goodbye"
-    ]):
+        "goodbye",
+        "good bye",
+        "allah hafiz",
+        "khuda hafiz",
+        "see you",
+        "see ya"
+    ]
+
+    if message_lower in goodbye_patterns:
+
         return (
             "Take care! 💗 "
             "I'll be here whenever you need me."
         )
 
-    # --------------------------------------------------------
+    # ========================================================
+    # URDU
+    # ========================================================
+
+    urdu_patterns = [
+        "kia tmhy urdu ati ha",
+        "kya tmhy urdu ati hai",
+        "kya tumhein urdu aati hai",
+        "kya tumhe urdu aati hai",
+        "urdu ati hai",
+        "urdu aati hai",
+        "can you speak urdu",
+        "do you speak urdu"
+    ]
+
+    if message_lower in urdu_patterns:
+
+        return (
+            "جی ہاں! 💗 میں اردو، رومن اردو اور انگریزی "
+            "سمجھ سکتا ہوں۔ آپ جس زبان میں بات کرنا چاہیں، "
+            "اسی میں مجھ سے بات کر سکتے ہیں۔"
+        )
+
+    # ========================================================
     # WHO ARE YOU
-    # --------------------------------------------------------
+    # ========================================================
 
     if (
-        "who are you" in message
-        or "your name" in message
-        or "what are you" in message
+        "who are you" in message_lower
+        or "what are you" in message_lower
+        or "your name" in message_lower
+        or "tum kon ho" in message_lower
+        or "aap kon hain" in message_lower
     ):
+
         return (
             "I'm MAA, your AI companion. 💗 "
-            "I can help you with the services available "
-            "through the MAA platform."
+            "You can talk to me about MAA's services, "
+            "ask questions, or simply chat with me."
+        )
+
+    return None
+
+
+# ============================================================
+# CONVERSATIONAL LLM
+# ============================================================
+
+def generate_conversational_response(
+    user_message: str
+) -> str:
+
+    if groq_client is None:
+
+        return (
+            "I'm here with you. 💗 "
+            "My AI service is temporarily unavailable."
+        )
+
+    system_prompt = """
+You are MAA, a warm, friendly and intelligent AI companion.
+
+This is CASUAL CONVERSATION mode.
+
+You can naturally respond to:
+
+- greetings
+- typos
+- short messages
+- casual conversation
+- emotional messages
+- small talk
+- Roman Urdu
+- Urdu
+- English
+- statements such as "I am good"
+- statements such as "I am tired"
+- statements such as "I want to eat something"
+- "favorite"
+- "I love you"
+- "I don't want to study"
+
+IMPORTANT:
+
+Do NOT use MAA documentation for ordinary conversation.
+
+Do NOT invent MAA services during casual conversation.
+
+Be natural and concise.
+
+If the user says they are tired, sad, stressed, lonely,
+worried or upset, respond with empathy.
+
+If the user mentions a health problem such as fever:
+
+- do not diagnose
+- do not prescribe medicine
+- do not provide dosage
+- do not give treatment instructions
+- respond empathetically
+- say that you cannot provide medical guidance from
+  the available MAA information
+
+Never claim to be human.
+
+Do not mention RAG, ChromaDB, embeddings,
+vector databases or internal implementation.
+
+If the user uses Roman Urdu, you may reply in Roman Urdu.
+
+Keep the response warm and conversational.
+"""
+
+    try:
+
+        completion = groq_client.chat.completions.create(
+
+            model="openai/gpt-oss-20b",
+
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ],
+
+            temperature=0.7,
+            max_tokens=250
+        )
+
+        answer = completion.choices[0].message.content
+
+        if not answer:
+
+            return (
+                "I'm here with you. 💗 "
+                "Tell me what's on your mind."
+            )
+
+        return answer.strip()
+
+    except Exception as e:
+
+        print(
+            f"❌ Conversational LLM error: {e}"
+        )
+
+        return (
+            "I'm here with you. 💗 "
+            "Tell me what's on your mind."
+        )
+
+
+# ============================================================
+# RAG + LLM RESPONSE
+# ============================================================
+
+def generate_rag_response(
+    user_message: str,
+    context: list
+) -> str:
+
+    # --------------------------------------------------------
+    # GROQ CHECK
+    # --------------------------------------------------------
+
+    if groq_client is None:
+
+        return (
+            "I'm sorry, my AI service is temporarily "
+            "unavailable. Please try again. 💗"
         )
 
     # --------------------------------------------------------
-    # NO RAG CONTEXT
+    # NO CONTEXT
     # --------------------------------------------------------
 
     if not context:
 
         return (
             "I'm sorry, I couldn't find relevant information "
-            "in the MAA documentation. 💗\n\n"
-            "You can ask me about MAA's travel, medicine, "
-            "food, home, emergency, or companion services."
+            "about that in the MAA documentation. 💗"
         )
 
     # --------------------------------------------------------
-    # BUILD RAG CONTEXT
+    # BUILD CONTEXT
     # --------------------------------------------------------
 
     context_parts = []
 
     for item in context:
 
-        text = item.get("text", "").strip()
+        text = item.get(
+            "text",
+            ""
+        ).strip()
 
         if not text:
             continue
@@ -243,22 +715,12 @@ def generate_response(
 
         return (
             "I'm sorry, I couldn't find enough information "
-            "in the MAA documentation. 💗"
+            "about that in the MAA documentation. 💗"
         )
 
-    rag_context = "\n\n---\n\n".join(context_parts)
-
-    # --------------------------------------------------------
-    # GROQ CHECK
-    # --------------------------------------------------------
-
-    if groq_client is None:
-
-        return (
-            "I found relevant information in the MAA "
-            "documentation, but the AI response service "
-            "is currently unavailable. 💗"
-        )
+    rag_context = "\n\n---\n\n".join(
+        context_parts
+    )
 
     # --------------------------------------------------------
     # SYSTEM PROMPT
@@ -267,30 +729,74 @@ def generate_response(
     system_prompt = """
 You are MAA, a warm, friendly and helpful AI companion.
 
-Your job is to answer users using the provided MAA
-documentation/context.
+This is MAA KNOWLEDGE mode.
 
-IMPORTANT RULES:
+The user is asking about an actual MAA service,
+feature or documented capability.
 
-1. Use the provided documentation as your primary source.
-2. Do not invent MAA services, features, prices, policies,
-   medicines, destinations, or capabilities.
-3. If the documentation does not contain enough information,
-   honestly say that the information is not available in the
-   MAA documentation.
-4. Keep answers concise, clear and natural.
-5. Use simple language.
-6. You may use a small amount of friendly warmth and emojis,
-   especially 💗, but do not overuse them.
-7. Do not mention "RAG", "ChromaDB", embeddings, vector database,
-   system prompts, or internal implementation details.
-8. For health or medicine questions, do not diagnose the user
-   or invent medical advice. Only describe what MAA documentation
-   actually says.
-9. For emergency-related questions, clearly provide the emergency
-   options that appear in the documentation.
-10. Answer the user's exact question rather than dumping all
-    retrieved information.
+The provided documentation is the ONLY source of truth.
+
+RULES:
+
+1. Answer the exact user question.
+
+2. Use ONLY the provided MAA documentation for
+   MAA-specific factual claims.
+
+3. Paraphrase naturally.
+
+4. Do not copy documentation word-for-word.
+
+5. NEVER invent:
+
+   - services
+   - features
+   - prices
+   - fees
+   - doctors
+   - medicines
+   - destinations
+   - emergency numbers
+   - policies
+   - bookings
+   - capabilities
+
+6. If the documentation does not answer the question,
+   clearly say that the information is not available
+   in the MAA documentation.
+
+7. Do not add unrelated information.
+
+8. If the user asks:
+   "What services does MAA provide?"
+   summarize the documented MAA services.
+
+9. If the user asks:
+   "Tell me about Travel Assistance"
+   summarize ONLY the documented Travel Assistance
+   information.
+
+10. If the user asks about food services, use ONLY
+    documented food-service information.
+
+11. If the user asks a medical question, do not diagnose,
+    prescribe medicine or invent treatment.
+
+12. Keep answers concise.
+
+13. Use simple language.
+
+14. A small number of emojis is okay.
+
+15. Never mention:
+
+    - RAG
+    - ChromaDB
+    - embeddings
+    - vector database
+    - retrieval
+    - system prompt
+    - internal implementation
 """
 
     # --------------------------------------------------------
@@ -310,7 +816,14 @@ USER QUESTION:
 
 ---
 
-Answer the user's question naturally as MAA.
+Answer the user's question using ONLY the
+MAA documentation above.
+
+If the documentation does not contain the answer,
+say that the information is not available in the
+MAA documentation.
+
+Do not invent information.
 """
 
     # --------------------------------------------------------
@@ -320,7 +833,9 @@ Answer the user's question naturally as MAA.
     try:
 
         completion = groq_client.chat.completions.create(
+
             model="openai/gpt-oss-20b",
+
             messages=[
                 {
                     "role": "system",
@@ -331,15 +846,17 @@ Answer the user's question naturally as MAA.
                     "content": user_prompt
                 }
             ],
+
             temperature=0.3,
-            max_tokens=300
+            max_tokens=350
         )
 
         answer = completion.choices[0].message.content
 
         if not answer:
+
             return (
-                "I found relevant information, "
+                "I found information about that, "
                 "but I couldn't generate a response right now. 💗"
             )
 
@@ -347,12 +864,85 @@ Answer the user's question naturally as MAA.
 
     except Exception as e:
 
-        print(f"❌ Groq error: {e}")
+        print(
+            f"❌ Groq RAG error: {e}"
+        )
 
         return (
             "I'm sorry, I'm having trouble generating "
             "a response right now. 💗 Please try again."
         )
+
+
+# ============================================================
+# MAIN RESPONSE ROUTER
+# ============================================================
+
+def generate_response(
+    user_message: str,
+    context: list
+) -> str:
+
+    # ========================================================
+    # 1. DIRECT RESPONSE
+    # ========================================================
+
+    direct = direct_response(
+        user_message
+    )
+
+    if direct:
+
+        return direct
+
+    # ========================================================
+    # 2. QUERY TYPE
+    # ========================================================
+
+    query_type = detect_query_type(
+        user_message
+    )
+
+    print(
+        f"QUERY TYPE: {query_type}"
+    )
+
+    # ========================================================
+    # 3. CASUAL / EMOTIONAL CONVERSATION
+    # ========================================================
+
+    if query_type in [
+        "greeting",
+        "thanks",
+        "goodbye",
+        "urdu",
+        "identity",
+        "wellness",
+        "general"
+    ]:
+
+        return generate_conversational_response(
+            user_message
+        )
+
+    # ========================================================
+    # 4. MAA KNOWLEDGE QUESTION
+    # ========================================================
+
+    if query_type == "maa_service":
+
+        return generate_rag_response(
+            user_message,
+            context
+        )
+
+    # ========================================================
+    # 5. FALLBACK
+    # ========================================================
+
+    return generate_conversational_response(
+        user_message
+    )
 
 
 # ============================================================
@@ -404,27 +994,75 @@ def chat(request: ChatRequest):
         )
 
         # ----------------------------------------------------
-        # RAG
+        # QUERY TYPE
         # ----------------------------------------------------
 
-        context = retrieve_context(
-            request.message,
-            top_k=3
+        query_type = detect_query_type(
+            request.message
         )
 
+        # ----------------------------------------------------
+        # LOG
+        # ----------------------------------------------------
+
         print("\n" + "-" * 60)
-        print(f"USER: {request.message}")
-        print(f"RETRIEVED CHUNKS: {len(context)}")
 
-        for item in context:
+        print(
+            f"USER: {request.message}"
+        )
 
-            print(
-                f"- {item.get('chunk_id')} "
-                f"({item.get('similarity', 0):.3f})"
+        print(
+            f"QUERY TYPE: {query_type}"
+        )
+
+        # ----------------------------------------------------
+        # DIRECT RESPONSE
+        # ----------------------------------------------------
+
+        direct = direct_response(
+            request.message
+        )
+
+        # ----------------------------------------------------
+        # RAG ONLY FOR MAA QUESTIONS
+        # ----------------------------------------------------
+
+        context = []
+
+        if (
+            direct is None
+            and query_type == "maa_service"
+        ):
+
+            context = retrieve_context(
+                request.message,
+                top_k=3
             )
 
         # ----------------------------------------------------
-        # LLM RESPONSE
+        # RETRIEVAL LOGS
+        # ----------------------------------------------------
+
+        print(
+            f"RETRIEVED CHUNKS: {len(context)}"
+        )
+
+        for item in context:
+
+            similarity = float(
+                item.get(
+                    "similarity",
+                    0
+                )
+            )
+
+            print(
+                f"- {item.get('chunk_id')} "
+                f"(similarity: {similarity:.3f})"
+            )
+
+        # ----------------------------------------------------
+        # GENERATE RESPONSE
         # ----------------------------------------------------
 
         reply_text = generate_response(
@@ -432,7 +1070,10 @@ def chat(request: ChatRequest):
             context
         )
 
-        print(f"MAA: {reply_text}")
+        print(
+            f"MAA: {reply_text}"
+        )
+
         print("-" * 60)
 
         # ----------------------------------------------------
@@ -449,25 +1090,34 @@ def chat(request: ChatRequest):
             )
 
             if source not in sources:
+
                 sources.append(source)
 
         # ----------------------------------------------------
-        # RETURN
+        # RESPONSE
         # ----------------------------------------------------
 
         return ChatResponse(
+
             reply=reply_text,
+
             session_id=request.session_id,
+
             sources=sources,
+
             memory_updated=False
         )
 
     except Exception as e:
 
-        print(f"❌ Chat error: {e}")
+        print(
+            f"❌ Chat error: {e}"
+        )
 
         raise HTTPException(
+
             status_code=500,
+
             detail=f"Backend error: {str(e)}"
         )
 
@@ -481,7 +1131,10 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
+
         app,
+
         host="127.0.0.1",
+
         port=8000
     )
