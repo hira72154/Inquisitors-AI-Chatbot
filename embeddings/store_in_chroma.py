@@ -1,6 +1,6 @@
 """Load documentation chunks, create embeddings, and store them in ChromaDB."""
 
-import chromadb
+import chroma_db
 from pathlib import Path
 from typing import List, Dict, Optional
 import yaml

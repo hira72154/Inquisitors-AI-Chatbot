@@ -1,31 +1,43 @@
 const API_URL = "/api";
 
 export async function sendMessageToRAGPipeline(message) {
-  const response = await fetch(`${API_URL}/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      user_id: "frontend-user",
-      session_id: "maa-session-001",
-      message: message,
-    }),
-  });
+  console.log("🚀 Sending message to backend:", message);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Backend error: ${errorText}`);
+  try {
+    const response = await fetch(`${API_URL}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: "frontend-user",
+        session_id: "maa-session-001",
+        message: message,
+      }),
+    });
+
+    console.log("📡 Backend response status:", response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Backend error:", errorText);
+      throw new Error(errorText);
+    }
+
+    const data = await response.json();
+
+    console.log("✅ Backend data:", data);
+
+    return {
+      text: data.reply,
+      suggestions: getSuggestions(message),
+      ragCard: null,
+      sources: data.sources || [],
+    };
+  } catch (error) {
+    console.error("❌ RAG request failed:", error);
+    throw error;
   }
-
-  const data = await response.json();
-
-  return {
-    text: data.reply,
-    suggestions: getSuggestions(message),
-    ragCard: null,
-    sources: data.sources || [],
-  };
 }
 
 function getSuggestions(message) {
@@ -60,6 +72,21 @@ function getSuggestions(message) {
       "What food services are available?",
       "Can MAA help with groceries?",
       "What home-made food is available?",
+    ];
+  }
+
+  if (
+    text.includes("stress") ||
+    text.includes("stressed") ||
+    text.includes("anxious") ||
+    text.includes("sad") ||
+    text.includes("lonely") ||
+    text.includes("relax")
+  ) {
+    return [
+      "Can you help me relax?",
+      "I am feeling stressed",
+      "What wellness support does MAA provide?",
     ];
   }
 
